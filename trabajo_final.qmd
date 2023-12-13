@@ -1,0 +1,1516 @@
+---
+title: "Trabajo introducción a la ciencia de datos"
+author: "Francisco Pertíñez Perea"
+lang: es
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+---
+
+\newpage
+
+# Dataset WIZMIR
+
+# Análisis exploratorio de datos
+
+## Definición del problema
+
+Lo primero que vamos a hacer es buscar información sobre el dataset y el problemas que debemos resolver sobre este.
+
+Buscando información en la web, se ha encontrado en la página <https://sci2s.ugr.es/keel/dataset.php?cod=78> una descripción sobre el problema:
+
+-   **Descripción del dataset**: Conjunto de datos en el que cada instancia representa la información del tiempo de Izmir durante un determinado día (desde 01/01/1994 hasta 31/12/1997).
+-   **Objetivo**: predecir la temperatura media que hubo cada día.
+
+En base al objetivo descrito sabemos que nos encontramos ante un *Problema de Regresión*.
+
+Leyendo el fichero del dataset podemos obtener un listado con las variables que lo componen, estas son:
+
+**Regresores / variables independientes**
+
+-   Max_temperature (real): máxima temperatura que hubo ese día.
+-   Min_temperature (real): mínima temperatura que ha hubo ese día.
+-   Dewpoint (real): corresponde con el punto de rocío, este es la temperatura la que, durante un proceso de enfriamiento, empieza a condensarse el vapor de agua contenido en el aire, produciendo rocío.
+-   Precipitation (real): variable relacionada con la cantidad de lluvia que habido durante ese día.
+-   Sea_level pressure (real): presión a nivel del mar.
+-   Standard_presure (real): presión estándar.
+-   Visibility (real): variable relacionada con el nivel de visibilidad que hubo ese día.
+-   Wind_speed (real): variable relacionada con velocidad del viento que hubo ese día
+-   Max_wind_speed (real): máxima velocidad del viente que hubo ese día
+
+**Variable objetivo / variable dependiente**
+
+-   Mean temperature (real): temperatura media que hubo ese día.
+
+### Planteamiento de hipótesis
+
+Con toda esta información ya estamos en disposición de plantear ciertas hipótesis sobre el problema:
+
+-   ¿Las variables relacionadas con la temperatura son buenas candidatas para predecir la variable objetivo?
+-   ¿Existe una fuerte correlación entre las variables relacionadas con la temperatura?
+
+## Preparación de los datos
+
+En este apartado nuestro objetivo es obtener una visión clara de la estructura del dataset, para así poder limpiarlo y prepararlo para posteriores análisis gráficos o a través de estadística descriptiva.
+
+### Estructura del dataset
+
+A continuación vamos a leer el conjunto de datos para hacernos una idea sobre la estructura del dataset:
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+wizmir <- read.csv("wizmir/wizmir.dat", comment.char="@", header = FALSE)
+names(wizmir) <- c("max_temperature", "min_temperature", "dewpoint",
+                 "precipitation", "sea_level_pressure", "standard_pressure", 
+                 "visibility", "wind_speed", "max_wind_speed", "mean_temperature") 
+```
+
+```{r}
+str(wizmir)
+```
+
+A partir de la función `str` podemos obtener la siguiente información:
+
+-   Efectivamente tenemos las variables descritas en el propio fichero del conjunto de datos.
+-   Número de instancias: 1461.
+-   Número de variables: 10.
+-   Tipado de las variables: todas son de tipo real. Además, dicho tipado es el correcto teniendo en cuenta el significado de las variables.
+
+### Eliminación de variables
+
+Revisando cada una de las variables que compone el dataset para ver si existen algunas que no aporten información útil, concluimos que todas las variables contienen información que puede ser relevante a la hora de predecir la variable objetivo. Todas son mediciones sobre un determinado aspecto del tiempo que hubo en cada determinado día, por lo que la información que nos aporten puede ser muy valiosa.
+
+### Instancias duplicadas
+
+Comprobemos si hay instancias duplicadas en el dataset:
+
+```{r}
+wizmir[duplicated(wizmir), ]
+```
+
+Como podemos observar, tenemos únicamente una instancia duplicada. Dado que es una sola y teniendo el cuenta el tamaño del dataset, podemos eliminarla sin que haya ninguna repercusión tanto en el EDA como a la hora de aplicar regresión.
+
+```{r}
+wizmir <- unique(wizmir)
+```
+
+### Valores faltantes
+
+Comprobemos si existen valores faltantes en el conjunto de datos:
+
+```{r}
+wizmir %>% filter(rowSums(across(.cols = everything(), .fns = is.na)) > 0)
+```
+
+Como podemos observar, no tenemos ningún valor faltante.
+
+## Estadística descriptiva:
+
+En este apartado nuestro objetivo es describir el conjunto de datos desde el punto de vista de la estadística descriptiva.
+
+### Análisis de tendencia central
+
+Comenzaremos nuestro análisis usando medídas de tendencia central, estas son la media y la mediana
+
+```{r}
+means <- apply(wizmir, 2, mean)
+medians <- apply(wizmir, 2, median)
+
+central_tendencies <- data.frame(Mean = means, 
+                                 Median = medians)
+central_tendencies
+```
+
+En general, podemos ver que para toda variable del dataset, el valor de la media no difiere mucho de el de la mediana. Este es un indicativo de que la distribución que siguen las variables son bastante simétricas, además de que no haya una alta presencia de valores anómalos. Como sabemos si hubiese ambas cosas resultaría en que los valores de la media diferiría mucho de la mediana, al ser la media muy sensible tanto a distribuciones asimétricas como valores anómalos, y la mediana robusta a esto.
+
+### Análisis de dispersión
+
+A continuación, vamos a realizar un estudio de la variabilidad de los datos.
+
+**Mínimo, Máximo y Rango**:
+
+```{r}
+minimums <- apply(wizmir, 2, min)
+maximums <- apply(wizmir, 2, max)
+
+data.frame(Minimum = minimums, 
+           Maximum = maximums,
+           Range = (maximums - minimums))
+
+```
+
+Observando los resultados, podemos darnos cuenta que las variables relacionadas con la temperatura están medidas en la escala Fareheit, ya que tanto los máximos como los mínimos de estas variables son demasiado altos como para que estén en la escala Celsius. Tambien nos damos cuenta de que los rangos de valores son muy diferentes entre variables salvo las relacionadas con la temperatura, algo lógico pues cada variable mide aspéctos diferentes del tiempo.
+
+**Desviación estándar, varianza y desviación absoluta media**:
+
+```{r}
+standard_deviations <- apply(wizmir, 2, sd)
+variances <- apply(wizmir, 2, var)
+median_absolute_deviations <- apply(wizmir, 2, mad)
+
+data.frame(Standard_deviation = standard_deviations, 
+           Variance = variances,
+           Median_absolute_deviation = median_absolute_deviations)
+```
+
+Podemos observar que tenemos tanto variables que presentan cierta variabilidad en los datos (max_temperature, min_temperature, dewpoint, mean_temperature, wind_speed, y visibility) como variables que casi no presentan nada de variabilidad (sea_level_pressure, standard_pressure y max_wind_speed)
+
+Teniendo en cuenta los resultados obtenidos para las distintas medidas de dispersión y los rangos de valores que tiene cada una de las variables podemos decir que en general, las medidas de tendencia central son representativas de la variable a la que corresponden.
+
+**Cuantiles**:
+
+```{r}
+Q1s <- apply(wizmir, 2, quantile, probs = c(0.25))
+Q3s <- apply(wizmir, 2, quantile, probs = c(0.75))
+
+data.frame(Q1 = Q1s, 
+           Q2 = Q3s,
+           IQR = (Q3s - Q1s))
+```
+
+Podemos observar que el rango intercuartílico no es muy grande teniendo en cuenta el rango de las variables, esto es un indicio de que los valores estan agrupados en la parte central de la distribución.
+
+### Análisis de Skewness y Kurtosis
+
+Vamos a realizar una series de test estadísticas para analizar tanto la simetría como las kurtosis de la distribución de las distintas variables.
+
+**Skewness**:
+
+Para analizar la simetría de la distribución vamos a usar el test de Agostino.
+
+```{r}
+library(moments)
+```
+
+```{r}
+agostino.test(wizmir$max_temperature)
+agostino.test(wizmir$min_temperature)
+agostino.test(wizmir$dewpoint)
+agostino.test(wizmir$precipitation)
+agostino.test(wizmir$sea_level_pressure)
+agostino.test(wizmir$standard_pressure)
+agostino.test(wizmir$visibility)
+agostino.test(wizmir$wind_speed)
+agostino.test(wizmir$max_wind_speed)
+agostino.test(wizmir$mean_temperature)
+```
+
+Observaciones:
+
+-   Variables que muestran evidencia significativa de la presencia de sesgo: dewpoint, precipitation, sea_level_pressure, standard_pressure, visibility, wind_speed, max_wind_speed.
+-    Variables que no muestran evidencia significativa de la presencia de sesgo: max_temperature, min_temperature, mean_temperature.
+
+**Kurtosis**:
+
+Para analizar la kurtosis vamos a usar el test de Anscombe.
+
+```{r}
+anscombe.test(wizmir$max_temperature)
+anscombe.test(wizmir$min_temperature)
+anscombe.test(wizmir$dewpoint)
+anscombe.test(wizmir$precipitation)
+anscombe.test(wizmir$sea_level_pressure)
+anscombe.test(wizmir$standard_pressure)
+anscombe.test(wizmir$visibility)
+anscombe.test(wizmir$wind_speed)
+anscombe.test(wizmir$max_wind_speed)
+anscombe.test(wizmir$mean_temperature)
+```
+
+Observaciones:
+
+-   Variables que muestran evidencia significativa de tener kurtosis diferente de 3: max_temperature, min_temperature, precipitation, standard_pressure, visibility, wind_speed, max_wind_speed y mean_temperature.
+-   No hay evidencia significativa para rechazar la hipótesis nula de que la kurtosis es igual a 3: dewpoint y sea_level_pressure.
+
+### Normalidad de los datos
+
+Si bien con el test D'Agostino y el test de Anscombe-Glynn podemos hacernos una idea de qué variables siguen aproximadamente una distribución normal (distribución simétricar y kurtosis de 3 son características de distribuciones normales), vamos a utilizar otros mecanismos para cerciorarnos de estos, en concreto realizaremos el test de Shapiro-Wilk's y un gráfico QQ-plot.
+
+**Test de Shapiro-Wilk's**
+
+```{r}
+shapiro.test(wizmir$max_temperature)
+shapiro.test(wizmir$min_temperature)
+shapiro.test(wizmir$dewpoint)
+shapiro.test(wizmir$precipitation)
+shapiro.test(wizmir$sea_level_pressure)
+shapiro.test(wizmir$standard_pressure)
+shapiro.test(wizmir$visibility)
+shapiro.test(wizmir$wind_speed)
+shapiro.test(wizmir$visibility)
+shapiro.test(wizmir$wind_speed)
+shapiro.test(wizmir$max_wind_speed)
+shapiro.test(wizmir$mean_temperature)
+```
+
+En todos los casos, el p-valor es extremadamente pequeño, lo que sugiere que hay evidencia significativa para rechazar la hipótesis nula de que los datos provienen de una distribución normal. En otras palabras, según el test de Shapiro-Wilk, ninguna de las variables parece seguir una distribución normal.
+
+**QQ-plot**
+
+```{r}
+library(DataExplorer)
+```
+
+```{r}
+plot_qq(wizmir)
+```
+
+A partir del QQ-plot podemos sacar las siguientes conclusiones:
+
+-   La variable sea_level_pressure se asemeja casi completamente a la distribución normal.
+-   Todas las variables relacionadas con la temperatura (menos dewpoin) parece seguir un distribución muy similar, teniedo lo que parecen dos modas (cabezas) en la distribución, estas están mas pronunciadas sobre todo en max_temperature y mean_temperature, no tanto en min_temperature.
+-   Todas las variables aunque no siguen completamente la línea que marca la distribución normal, la mayoría de estas la siguen en gran parte, además parecen tener una sola cabeza las distribuciones.
+
+En resumen, si bien el test de Shapiro-Wilk sugiere que hay evidencia significativa para rechazar la hipótesis nula de que los datos provienen de una distribución normal, mirando el gráfico QQ-plot nos damos cuenta de que en general nuestras variables tiene cierto parecido a una distribución normal, lo cual es bueno de cara a las asumpciones estadísticas relacionadas con la normalidad de los datos que tienen en cuenta muchos modelos predictivos.
+
+## Visualización de datos
+
+Además de usar estadística descriptiva para mostrar los rasgos que presentan las variables del conjunto de datos, realizar distintos tipos de visualizaciones es interesante para no solo obtener información nueva, sino también contrastar la información que hemos obtenido mediante la estadística descriptiva.
+
+### Exploración de distribuciones:
+
+**Histogramas**
+
+En primer lugar vamos a pintar un histograma para cada variable para hacernos una idea de la distribución que siguen las variables. Además, también pintaremos la media y la mediana para comprobar que ambas no estan muy alejadas entre sí.
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+plot_hist <- function(data) {
+  sapply(names(data), function(col_name) {
+    
+    p <- data %>% ggplot(aes_string(x = col_name)) +
+      geom_histogram(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - ", col_name)) +
+      geom_vline(xintercept = median(data[[col_name]]), 
+                 color = "red", linetype = "dashed", size = 1.5) +
+      geom_vline(xintercept = mean(data[[col_name]]), color = "blue", 
+                 linetype = "dotted", size = 1.5)
+    print(p)
+  })
+}
+
+plot_hist(wizmir)
+```
+
+A partir de los histogramas podemos sacar las siguientes conclusiones:
+
+-   Tal y como nos indicaban las medidas de tendencia central y dispersión, la media y la mediana son bastante similares y además son representativas para cada una de las variables del dataset.
+
+-   En el histograma podemos apreciar claramente las dos cabezar que presentan las variables max_temperature, min_temperature y mean_temperature. Además como habíamos detectado en el gráfico QQ-plot estas variables siguen distribuciones muy similares.
+
+**Gráfico de cajas**
+
+A continuación vamos a mostrar diagramas de caja para cada variable, principalmente con el objeto de detectar outliers en las variables
+
+```{r}
+plot_boxplots <- function(data) {
+  sapply(names(data), function(col_name) {
+    p <- data %>% ggplot(aes_string(x = col_name)) +
+      geom_boxplot(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - ", col_name))
+    print(p)
+  })
+}
+
+plot_boxplots(wizmir)
+```
+
+Podemos ver como varias de las variables presentar valores anómalos, algunas como max_wind_speed, wind_speed, precipitation y standard_pressure presentan en gran cantidad, la razón de esto es que sus distribuciones presentan la mayoría de los valores muy juntos en un rango de valores muy pequeño, por lo que cualquier valor que se aleje aunque sea un poco de ese rango será considerado como valor atípico.
+
+### Exploración de relaciones entre variables
+
+De cara a la elección de las mejores variables para utilizar en un modelo lineal en Regresión, vamos a estudiar la interacción entre variables.
+
+#### Gráfico de puntos variable independiente vs dependiente
+
+A continuación vamos a graficar cada una de las variables independientes frente la variable dependiente, esto lo hacemos con el objeto de buscar aquellas variables candidatas para formar un modelo lineal en base a ellas.
+
+```{r}
+plot_corrs_with <- function(data, X, y) {
+  sapply(X, function(col) {
+    p <- data %>% ggplot(aes_string(x = col, y = y)) + 
+      geom_point() + 
+      geom_smooth(method = "lm") +
+      labs(title = paste("Correlación entre", col, "y", y))
+    print(p)
+  })
+}
+
+
+plot_corrs_with(wizmir, X = colnames(wizmir[, !names(wizmir) %in% "mean_temperature"]), 
+                y = "mean_temperature")
+```
+
+A partir de las nubes de punto podemos sacar las siguientes conclusiones:
+
+-   Las variables max_temperature y min_temperature presentan un relación lineal muy fuerte con la variable objetivo. Son las principales candidatas para realizar un modelo lineal.
+-   Dewpoint y sea_level pressure presentan una cierta relación lineal con la variable objetivo, sin embargo esta relación no es tan buena como la que tiene con max_temperature y min_temperature de cara a realizar un modelo lineal en base a ellas.
+-   Las demás variables no presentan ninguna relación clara con la variable objetivo.
+
+#### Gráfico de puntos variable independiente vs independiente
+
+En este caso vamos a graficar cada variable independiente frente a las demás independiente, todo esto con el objeto de detectar correlaciones entre variables y así saber qué variables se podrian no usar en un modelo lineal ya que otra contiene la misma información. Mostraremos tanto una nube de puntos como un gráfico de correlaciones, pues este último es muy útil para ver la correlación entre dos variables.
+
+```{r}
+library(Sleuth2)
+```
+
+```{r}
+pairs(wizmir[!names(wizmir) %in% "mean_temperature"], upper.panel = NULL)
+```
+
+```{r}
+library(corrplot)
+```
+
+```{r}
+corrplot(cor(wizmir[, !names(wizmir) %in% "mean_temperature"]), 
+         method = "ellipse", type = "lower")
+```
+
+Observaciones:
+
+-   Existe una muy fuerte correlación entre todas las variables relacionadas con la temperatura (min_temperature, max_temperature, dewpoint). Este es un indicio de que estas las variables continen información redundante entre ellas.
+-   También existe una fuerte correlación entre la variable sea_level_pressure y las variables relacionadas con la temperatura.
+-   Existe una fuerte correlación entre la variable wind_speed y la variable visibility.
+-   Las demás correlaciones no son suficientemente fuertes como para tenerlas en cuenta.
+
+## Ingeniería de características.
+
+### Creación de variables:
+
+Como hemos visto en el anterior apartado, todas las variables relacionadas con la temperatura presentan alta correlación entre estas. Como sabemos, utilizar varias variables con alta correlación en un modelo de regresión puede dar lugar al problema conocidos como la multicolinealidad. La multicolinealidad se refiere a la alta correlación entre dos o más variables predictoras en un modelo de regresión múltiple.
+
+Este problema se puede solucionar de distintas maneras (utilizar solo una de las variables correlacionadas, realizar PCA, ...). Desde el punto de vista de la ingeniería de características, se ha optado por realizar una combinación de alguna de las variables relacionadas con la temperatura, en concreto se ha creado la variable mean_min_max_temperature, la cual se obtiene haciendo la media entre la temperatura maxíma y mínima.
+
+```{r}
+new_wizmir <- wizmir %>% 
+  mutate(mean_min_max_temperature = (max_temperature + min_temperature)/2)
+```
+
+```{r}
+new_wizmir %>% ggplot(aes_string(x = new_wizmir$mean_min_max_temperature)) +
+      geom_histogram(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - r_temperature"))
+```
+
+Como podemos observar, la distribución de esta nueva variable está mitad de camino entre la distribución de min_temperature y max_temperature.
+
+Vamos a hacer un gráfico de puntos de esta nueva variable frente a la variable objetivo para ver si es una buena variable para usar en el modelo lineal.
+
+```{r}
+new_wizmir %>% ggplot(aes(x = mean_min_max_temperature, y = mean_temperature)) + 
+      geom_point() + 
+      geom_smooth(method = "lm") +
+      labs(title = paste("Correlación entre r_temperature y mean_temperature"))
+```
+
+Como podemos observar, la nueva variable obtenida tiene la relación lineal más fuerte con la variable objetivo que cualquier de las variables originales del dataset. Esto tiene sentido pues la media entre la temperatura mínima y máxima que ha habido durante un día parece ser una buena aproximación de la temperatura media que hubo ese día. Seguramente realizando un modelo lineal en base a esta variable únicamente nos dará uno grandes resultados a la hora de predecir la variable objetivo. Además, al no tener que usar las variables max_temperature y min_temperature pues esta nueva resume ambas, nos quitamos en gran parte el problema de correlación entre variables.
+
+```{r}
+pairs(new_wizmir[, !names(new_wizmir) %in% c("min_temperature",
+                                             "max_temperature",
+                                             "mean_temperature")], 
+      upper.panel = NULL)
+```
+
+```{r}
+corrplot(cor(new_wizmir[, !names(new_wizmir) %in% c("min_temperature",
+                                                  "max_temperature",
+                                                  "mean_temperature")]), 
+         method = "ellipse", type = "lower")
+```
+
+Tal y como podemos observar, el número de variables que tenían correlación ha disminuido considerablemente.
+
+### Transformación de variables
+
+En este apartado vamos a aplicar distintas transformaciones a las variables para ver si alguna le hace bien a la distribución de las variables, bien sea haciéndola más simétrica, reduciendo su kurtosis, etc.
+
+**Transformación logarítmica**:
+
+```{r}
+wizmir_log <- wizmir %>%
+  mutate(across(where(is.numeric), ~log(.)))
+
+head(wizmir_log)
+```
+
+```{r}
+plot_hist(wizmir_log)
+```
+
+Observaciones:
+
+-   La tranformación logaritmica hace más semejante a una distribución normal las variables wind_speed
+
+**Tranformación raiz cuadrada**:
+
+```{r}
+wizmir_sqrt <- wizmir %>%
+  mutate(across(where(is.numeric), ~sqrt(.)))
+
+head(wizmir_sqrt)
+```
+
+```{r}
+plot_hist(wizmir_sqrt)
+```
+
+Observaciones:
+
+-   La tranformación raiz cuadrada hace más semejante a una distribución normal a la variable visibility
+
+## Conclusiones finales
+
+### Comprobación de las hipótesis
+
+-   ¿Las variables relacionadas con la temperatura son buenas candidatas para predecir la variable objetivo?
+
+-   ¿Existe una fuerte correlación entre las variables relacionadas con la temperatura?
+
+Ambas hipótesis hemos comprobado que son ciertas mediante la exploración de relaciones entre variables.
+
+### Resumen del conjunto de datos
+
+Tenemos un conjunto de datos con variables muy buenas para predecir la variable objetivo. Probablemente unicamente realizando un modelo lineal que solo consista en una de las variables relacionadas con al temperatura (max_temperature, min_temperature, dewpoint y sobre todo mean_min_max_temperature) será más que suficiente para obtener unos buenos resultados predictivos.
+
+# Regresión
+
+## Modelos lineales simples
+
+En este primer apartado vamos a buscar las 5 mejores variables del conjunto de datos con las que hacer un modelo lineal simple, y de ellas buscaremos nos dá el mejor resultado en base a la métrica $R^2$ ajustado
+
+A partir de la exploración de relaciones entre variables realizada en el EDA, donde mostramos cada variable independiente frente a la dependiente, sabemos que las variables candidatas para el ajuste lineal simple son: max_temperature, min_temperature, dewpoint, sea_level_pressure y visibility
+
+Obtención dichos modelos lineales:
+
+```{r}
+fit1 <- lm(mean_temperature ~ max_temperature, data = wizmir)
+summary(fit1)
+sqrt(sum(fit1$residuals ^ 2) / length(fit1$residuals))
+plot(mean_temperature ~ max_temperature, wizmir)
+abline(fit1, col = "red")
+confint(fit1)
+```
+
+```{r}
+fit2 <- lm(mean_temperature ~ min_temperature, data = wizmir)
+summary(fit2)
+sqrt(sum(fit2$residuals ^ 2) / length(fit2$residuals))
+plot(mean_temperature ~ min_temperature, wizmir)
+abline(fit2, col = "red")
+confint(fit2)
+```
+
+```{r}
+fit3 <- lm(mean_temperature ~ dewpoint, data = wizmir)
+summary(fit3)
+sqrt(sum(fit3$residuals ^ 2) / length(fit3$residuals))
+plot(mean_temperature ~ dewpoint, wizmir)
+abline(fit3, col = "red")
+confint(fit3)
+```
+
+```{r}
+fit4 <- lm(mean_temperature ~ sea_level_pressure, data = wizmir)
+summary(fit4)
+sqrt(sum(fit4$residuals ^ 2) / length(fit4$residuals))
+plot(mean_temperature ~ sea_level_pressure, wizmir)
+abline(fit4, col = "red")
+confint(fit4)
+```
+
+```{r}
+fit5 <- lm(mean_temperature ~ visibility, data = wizmir)
+summary(fit5)
+sqrt(sum(fit5$residuals ^ 2) / length(fit5$residuals))
+plot(mean_temperature ~ visibility, wizmir)
+abline(fit5, col = "red")
+confint(fit5)
+```
+
+Entre todos los modelos, el modelo creado a partir de la variable max_temperature es el que obtiene el mejor valor de $R^2$ ajustado, por tanto este es el elegido.
+
+## Modelos lineales múltiples
+
+### Sin interacción entre variables
+
+En este apartado vamos a obtener distintos modelos lineales múltiples. Comenzaremos con el modelo que utiliza todas las variables e iremos quitando las variables que aporten menos al modelo hasta obtener un modelo que tenga un compromiso entre interpretabilidad (número de variables) y calidad.
+
+```{r}
+mulfit1 <- lm(mean_temperature ~ ., data = wizmir)
+summary(mulfit1)
+```
+
+Teniendo en cuenta los codigos de significancia, las dos variables que menos importantes para el modelo son wind_speed y visibility. Eliminamos visibility. 
+
+```{r}
+mulfit2 <- lm(mean_temperature ~ . - visibility, data = wizmir)
+summary(mulfit2)
+```
+
+Como vemos, no se ha producido casi ningun empeoramiento en la métrica $R^2$ por lo que ha sido una buena eliminación de variable. La siguiente que vamos a quitar es la variable precipitation pues es la que tiene el peor código de significancia en este nuevo modelo.
+
+```{r}
+mulfit3 <- lm(mean_temperature ~ . - visibility - precipitation, data = wizmir)
+summary(mulfit3)
+```
+
+Como vemos, el $R^2$ ajustado no ha variado, por lo que esa variable no aportaba nada. La siguiente variable que vamos a eliminar es standard_pressure, pues es la que tiene el peor código de significancia junto con max_wind_speed.
+
+```{r}
+mulfit4 <- lm(mean_temperature ~ . - visibility - precipitation - standard_pressure, 
+              data = wizmir)
+summary(mulfit4)
+```
+
+De nuevo, no se produce empeoramiento en el $R^2$ ajustado, por lo que esa variable no aportaba nada. Siguiendo la lógica que estamos siguiendo ahora eliminamos max_wind_speed
+
+```{r}
+mulfit5 <- lm(mean_temperature ~ . - visibility - precipitation - standard_pressure - max_wind_speed, 
+              data = wizmir)
+summary(mulfit5)
+```
+
+Como podemos observar, no obtenemos casi nada de empeoramiento en el $R^2$ ajustado, por lo que podemos eliminarla sin problemas, La siguiente que vamos a eliminar es dewpoint pues es la variable con peor codigo de significancia.
+
+```{r}
+mulfit6 <- lm(mean_temperature ~ . - visibility - precipitation - standard_pressure - max_wind_speed - dewpoint, 
+              data = wizmir)
+summary(mulfit6)
+```
+
+De nuevo, no se produce empeoramiento en el $R^2$ ajustado, por lo que esa variable no aportaba nada que no tenga ya el modelo. Las variables que nos quedan tiene todas altos códigos de significancia por lo que son importantes, sin embargo a partir del EDA que hemos realizado anteriormente, sabemos que existe una muy alta correlación entre max_temperature, min_temperature y sea_level_pressure, por lo que si eliminamos una de ellas posiblemente no haya mucho empeoramiento, y además paliamos el problema de multicolinearidad, lo probamos eliminado sea_level_pressure:
+
+```{r}
+mulfit7 <- lm(mean_temperature ~ . - visibility - precipitation - standard_pressure - max_wind_speed - dewpoint - sea_level_pressure, 
+              data = wizmir)
+summary(mulfit7)
+```
+
+Como hemos podido observar, casi no hemos obtenido emperamiento aun teniendo la variable un alto codigo de significancia, esto es debido a la correlación que existe entre las variables. Probamos a eliminar también min_temperature debido a la correlación:
+
+```{r}
+mulfit8 <- lm(mean_temperature ~ . - visibility - precipitation - standard_pressure - max_wind_speed - dewpoint - sea_level_pressure - min_temperature, 
+              data = wizmir)
+summary(mulfit8)
+```
+
+En este caso el empeoramiento ha sido más alto, entre un 2 y un 3%. Dado que este empeoramieno es cosiderable en comparación con los anteriores paramos aquí y nos quedamos con el modelo mulfit7. Este es un modelo que usa sólo 3 variables, lo cual significa que tienen una muy alta interpretabilidad, y además tiene unas muy buenas métricas.
+
+### Con interacción entre variables y tranformaciones
+
+El modelo que hemos obtenido anteriormente (mulfit7) tiene dos variables que tienen una alta correlación entre ambas, además sabemos por el EDA que estas por sí solas tienen una relación lineal muy fuerte con la variable objetivo. Si hacemos una interacción entre ambas seguramente obtengamos un modelo muy bueno para la tarea de predicción, y además nos quitamos el problema de la correlación entre las dos variables. Tal y como decíamos en la parte de ingeniería de características del EDA, si creamos una variable a partir de la media de la temperatura máxima y la mínimo obtendremos una variable que estime bastante bien la temperatura media. Lo probamos.
+
+
+```{r}
+mulfit9 <- lm(mean_temperature ~ I((max_temperature+min_temperature)/2), 
+              data = wizmir)
+summary(mulfit9)
+```
+
+Tal como decíamos, hemos obtenido un modelo con una sola variable que nos dá prácticamente los mismo resultados que obteníamos con el modelo fitmul7.
+
+Vamos a probar otra interacción. A partir del EDA hemos visto que la transfomación logarítmica ayuda a la variable wind_speed a tener una distribución más parecida a una distribución normal. Lo probamos con el modelo fitmul9 aplicando el logaritmo y sin aplicarlo a la variable wind_speed
+
+```{r}
+mulfit10 <- lm(mean_temperature ~ I((max_temperature+min_temperature)/2) + wind_speed, 
+               data = wizmir)
+summary(mulfit10)
+```
+
+```{r}
+mulfit11 <- lm(mean_temperature ~ I((max_temperature+min_temperature)/2) + I(log(wind_speed)), 
+               data = wizmir)
+summary(mulfit11)
+```
+
+Como podemos ver obtenemos una ligera mejora usando el logaritmo frente a no usarlo en la variable wind_speed.
+
+## KNN en problemas de regresión
+
+En este apartado vamos a usar al algoritmo KNN para regresión. Vamos crear un modelo con todas las variables tanto para KNN como para regresión y vamos a comparar el error cuadrático medio que obtenemos tanto en entrenamiento como en test.
+
+```{r}
+library(kknn)
+```
+
+```{r}
+nombre <- "wizmir/wizmir"
+run_knn_fold <- function(i, x, tt = "test") {
+    file <- paste(x, "-5-", i, "tra.dat", sep="")
+    x_tra <- read.csv(file, comment.char="@", header=FALSE)
+    file <- paste(x, "-5-", i, "tst.dat", sep="")
+    x_tst <- read.csv(file, comment.char="@", header=FALSE)
+    In <- length(names(x_tra)) - 1
+    names(x_tra)[1:In] <- paste ("X", 1:In, sep="")
+    names(x_tra)[In+1] <- "Y"
+    names(x_tst)[1:In] <- paste ("X", 1:In, sep="")
+    names(x_tst)[In+1] <- "Y"
+    if (tt == "train") {
+        test <- x_tra
+    }
+    else {
+        test <- x_tst
+    }
+    fitMulti=kknn(Y~.,x_tra,test)
+    yprime=fitMulti$fitted.values
+    sum(abs(test$Y-yprime)^2)/length(yprime) ##MSE
+}
+```
+
+```{r}
+knnMSEtrain<-mean(sapply(1:5,run_knn_fold,nombre,"train"))
+knnMSEtest<-mean(sapply(1:5,run_knn_fold,nombre,"test"))
+knnMSEtrain
+knnMSEtest
+```
+
+```{r}
+nombre <- "wizmir/wizmir"
+run_lm_fold <- function(i, x, tt = "test") {
+    file <- paste(x, "-5-", i, "tra.dat", sep="")
+    x_tra <- read.csv(file, comment.char="@", header=FALSE)
+    file <- paste(x, "-5-", i, "tst.dat", sep="")
+    x_tst <- read.csv(file, comment.char="@", header=FALSE)
+    In <- length(names(x_tra)) - 1
+    names(x_tra)[1:In] <- paste ("X", 1:In, sep="")
+    names(x_tra)[In+1] <- "Y"
+    names(x_tst)[1:In] <- paste ("X", 1:In, sep="")
+    names(x_tst)[In+1] <- "Y"
+    if (tt == "train") {
+        test <- x_tra
+    }
+    else {
+        test <- x_tst
+    }
+    fitMulti=lm(Y~.,x_tra)
+    yprime=predict(fitMulti,test)
+    sum(abs(test$Y-yprime)^2)/length(yprime) ##MSE
+}
+```
+
+```{r}
+lmMSEtrain<-mean(sapply(1:5,run_lm_fold,nombre,"train"))
+lmMSEtest<-mean(sapply(1:5,run_lm_fold,nombre,"test"))
+
+lmMSEtrain
+lmMSEtest
+```
+
+Podemos observar que para este problema, el modelo lineal múltiple obtiene un mejor desempeño que el modelo usando KNN.
+
+## Comparativa de algoritmos
+
+Este apartado consiste en utilizar las particiones 5-fcv para su dataset con k-NN y con la regresión lineal múltiple con todas las variables. Debemos Reemplazar los resultados de las tablas disponibles en regr_test_alumnos.csv y en regr_train_alumnos.csv para el dataset wizmir.
+
+### Comparativas por pares de LM y KNN (test de Wilcoxon)
+
+Leemos la tabla con los errores medios tanto de test como de entrenamiento. 
+
+```{r}
+resultados <- read.csv("regr_test_alumnos.csv")
+tablatst <- cbind(resultados[,2:dim(resultados)[2]])
+colnames(tablatst) <- names(resultados)[2:dim(resultados)[2]]
+rownames(tablatst) <- resultados[,1]
+
+resultados <- read.csv("regr_train_alumnos.csv")
+tablatra <- cbind(resultados[,2:dim(resultados)[2]])
+colnames(tablatra) <- names(resultados)[2:dim(resultados)[2]]
+rownames(tablatra) <- resultados[,1]
+```
+
+
+```{r}
+##lm (other) vs knn (ref)
+# + 0.1 porque wilcox R falla para valores == 0 en la tabla
+difs <- (tablatst[,1] - tablatst[,2]) / tablatst[,1]
+wilc_1_2 <- cbind(ifelse (difs<0, abs(difs)+0.1, 0+0.1), ifelse (difs>0, abs(difs)+0.1, 0+0.1))
+colnames(wilc_1_2) <- c(colnames(tablatst)[1], colnames(tablatst)[2])
+head(wilc_1_2)
+```
+
+Se aplica test y se interpreta los resultados.
+
+```{r}
+LMvsKNNtst <- wilcox.test(wilc_1_2[,1], wilc_1_2[,2], alternative = "two.sided", paired=TRUE)
+Rmas <- LMvsKNNtst$statistic
+pvalue <- LMvsKNNtst$p.value
+LMvsKNNtst <- wilcox.test(wilc_1_2[,2], wilc_1_2[,1], alternative = "two.sided", paired=TRUE)
+Rmenos <- LMvsKNNtst$statistic
+
+Rmas
+Rmenos
+pvalue
+```
+
+No existen diferencias significativas entre ambos algoritmos, solo un 23.4% de confianza de que sean distintos
+
+### Comparativa general entre distintos algoritmos
+Usaremos Friedman y como post-hoc Holm (los rankings se calculan por posiciones de los 
+algoritmos para cada problema y no hace falta normalización)
+
+```{r}
+test_friedman <- friedman.test(as.matrix(tablatst))
+test_friedman
+```
+
+Existen diferencias significativasal menos entre un par de algoritmos
+
+```{r}
+tam <- dim(tablatst)
+groups <- rep(1:tam[2], each=tam[1])
+pairwise.wilcox.test(as.matrix(tablatst), groups, p.adjust = "holm", paired = TRUE)
+```
+
+Existen diferencias significativas a favor de M5’ (3vs1 0.081 y 3vs2 0.108, con aprox. 
+90% de confianza) mientras que los otros dos pueden ser considerados equivalentes
+
+\newpage
+
+# Dataset VOWEL
+
+# Análisis exploratorio de datos
+
+## Definición del problema
+
+Lo primero que vamos a hacer es buscar información sobre el dataset y el problemas que debemos resolver sobre este.
+
+Buscando información en la web, se ha encontrado en la página <https://sci2s.ugr.es/keel/dataset.php?cod=113> una descripción sobre el problema:
+
+-   **Descripción del dataset**: Esta base de datos contiene información sobre el reconocimiento independiente del hablante de las once vocales en estado estacionario del inglés británico utilizando un conjunto de entrenamiento específico de relaciones de área logarítmica derivadas de lpc.
+-   **Objetivo**: predecir que vocal es cada instancia del dataset.
+
+También se ha encontrado en la página <https://www.openml.org/search?type=data&sort=runs&id=58&status=active> una descripción más detallada de lo que son cada una de las variables del dataset.
+
+En base al objetivo descrito sabemos que nos encontramos ante un *Problema de Clasificación*.
+
+Leyendo el fichero del dataset podemos obtener un listado con las variables que lo componen, estas son:
+
+**Regresores / variables independientes**
+
+- TT (categórica): Dice si dicha instancia pertenece al conjunto de entrenamiento o test
+- SpeakerNumber (categórica): Identificador del hablante.
+- Sex (categórica): Sexo del hablante
+- F0 - F9 (real): Son distintas características que identifican la vocal que ha pronunciado el hablante.
+- Class (categórica): como variable objetivo, identifica la vocal que es cada instancia.
+
+### Planteamiento de hipótesis
+
+Con toda esta información ya estamos en disposición de plantear ciertas hipótesis sobre el problema:
+
+- ¿El sexo influyen en las distribuciones de las variables numéricas?
+- ¿La clase objetivo influye en las distribuciones de las variables numéricas?
+- ¿Y la clase y el sexo juntos?
+
+## Preparación de los datos
+
+En este apartado nuestro objetivo es obtener una visión clara de la estructura del dataset, para así poder limpiarlo y prepararlo para posteriores análisis de tipo gráfico o a través de estadística descriptiva.
+
+### Estructura del dataset
+
+A continuación vamos a leer el conjunto de datos para hacernos una idea sobre la estructura del dataset:
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+vowel <- read.csv("vowel/vowel.dat", comment.char="@", header = FALSE)
+names(vowel) <- c("tt", "speaker_number", "sex",
+                 "f0", "f1", "f2", "f3",
+                 "f4", "f5", "f6", "f7", "f8", "f9", "class") 
+```
+
+```{r}
+str(vowel)
+```
+
+A partir de la función `str` podemos obtener la siguiente información:
+
+-   Efectivamente tenemos las variables descritas en el propio fichero del conjunto de datos.
+-   Número de instancias: 990.
+-   Número de variables: 14.
+-   Tipado de las variables: el tipado no es el correcto, pues las variables categóricas estan como numéricas, lo cambiamos:
+
+```{r}
+vowel$tt <- factor(vowel$tt, c(0,1), c("train", "test"))
+vowel$speaker_number <- factor(vowel$speaker_number, 0:14, as.character(0:14))
+vowel$sex <- factor(vowel$sex, c(0,1), c("male", "female"))
+vowel$class <- factor(vowel$class, 0:10, as.character(0:10))
+```
+
+### Eliminación de variables
+
+Revisando cada una de las variables que compone el dataset para ver si existen algunas que no aporten información útil, concluimos que:
+
+- Eliminamos la variable TT: esta da información de si esa instancia pertenece al conjunto de test o entrenamiento, por tanto no aporta ninguna información útil, más bien puede introducir información que confunda al modelo. Además a la hora de aplicar los modelos de clasificación crearemos nuestros propios conjuntos de entrenamiento y test.
+
+- Eliminamos la variable speaker_number: no queremos que el modelo aprenda a distinguir vocales en base al hablante. Lo que queremos es distinguir las vocales en base a las características del sonido que realiza una persona cualquiera al la hora de pronunciar una vocal.
+
+Las demás variables nos aportan información útil de cara a nuestro objetivo.
+
+Dicho esto eliminamos las varaibles que no queremos:
+
+```{r}
+vowel <- vowel[,-(1:2)]
+```
+
+```{r}
+str(vowel)
+```
+
+
+### Instancias duplicadas
+
+Comprobemos si hay instancias duplicadas en el dataset:
+
+```{r}
+vowel[duplicated(vowel), ]
+```
+Como podemos observar, no tenemos instancias duplicadas.
+
+### Valores faltantes
+
+Comprobemos si existen valores faltantes en el conjunto de datos:
+
+```{r}
+vowel %>% filter(rowSums(across(.cols = everything(), .fns = is.na)) > 0)
+```
+
+Como podemos observar, no tenemos ningún valor faltante.
+
+## Estadística descriptiva:
+
+En este apartado nuestro objetivo es describir el conjunto de datos desde el punto de vista de la estadística descriptiva.
+
+### Análisis de tendencia central (variables numéricas)
+
+Comenzaremos nuestro análisis usando medídas de tendencia central, estas son la media y la mediana
+
+```{r}
+means <- apply(vowel[,2:11], 2, mean)
+medians <- apply(vowel[,2:11], 2, median)
+
+central_tendencies <- data.frame(Mean = means, 
+                                 Median = medians)
+central_tendencies
+```
+
+En general, podemos ver que para toda variable del conjunto de datos, el valor de la media no difiere mucho de el de la mediana. Este es un indicativo de que la distribución que siguen las variables son bastante simétricas, además de que no haya una alta presencia de valores anómalos. Como sabemos si hubiese ambas cosas resultaría en que los valores de la media diferiría mucho de la mediana, al ser la media muy sensible tanto a distribuciones asimétricas como valores anómalos, en contraposición a la mediana que es robusta a esto.
+
+### Análisis de dispersión (variables numéricas)
+
+A continuación, vamos a realizar un estudio de la variabilidad de los datos.
+
+**Mínimo, Máximo y Rango**:
+
+```{r}
+minimums <- apply(vowel[,2:11], 2, min)
+maximums <- apply(vowel[,2:11], 2, max)
+
+data.frame(Minimum = minimums, 
+           Maximum = maximums,
+           Range = (maximums - minimums))
+
+```
+
+En base a los resultados obtenidos podemos ver que prácticamente todas las variables están en un rango de valores similares, esto puede debido a la transformación logarítmica que decían que se había aplicado en la descripción del dataset.
+
+**Desviación estándar, varianza y desviación absoluta media**:
+
+```{r}
+standard_deviations <- apply(vowel[,2:11], 2, sd)
+variances <- apply(vowel[,2:11], 2, var)
+median_absolute_deviations <- apply(vowel[,2:11], 2, mad)
+
+data.frame(Standard_deviation = standard_deviations, 
+           Variance = variances,
+           Median_absolute_deviation = median_absolute_deviations)
+```
+
+Podemos observar que todas las variables tienen una variabilidad similar.
+
+Teniendo en cuenta los resultados obtenidos para las distintas medidas de dispersión y los rangos de valores que tiene cada una de las variables podemos decir que en general, las medidas de tendencia central son representativas de la variable a la que corresponden.
+
+**Cuantiles**:
+
+```{r}
+Q1s <- apply(vowel[,2:11], 2, quantile, probs = c(0.25))
+Q3s <- apply(vowel[,2:11], 2, quantile, probs = c(0.75))
+
+data.frame(Q1 = Q1s, 
+           Q2 = Q3s,
+           IQR = (Q3s - Q1s))
+```
+
+Observamos que el rango intercuartílico no es muy grande teniendo en cuenta el rango de las variables, esto es un indicio de que los valores estan agrupados en la parte central de la distribución.
+
+### Análisis de Skewness y Kurtosis
+
+Vamos a realizar una series de test estadísticos para analizar tanto la simetría como las kurtosis de la distribución de las distintas variables.
+
+**Skewness**:
+
+Para analizar la simetría de la distribución vamos a usar el este de Agostino.
+
+```{r}
+library(moments)
+```
+
+```{r}
+agostino.test(vowel$f0)
+agostino.test(vowel$f1)
+agostino.test(vowel$f2)
+agostino.test(vowel$f3)
+agostino.test(vowel$f4)
+agostino.test(vowel$f5)
+agostino.test(vowel$f6)
+agostino.test(vowel$f7)
+agostino.test(vowel$f8)
+agostino.test(vowel$f9)
+```
+
+Observaciones:
+
+-   Variables que muestran evidencia significativa de la presencia de sesgo: f2, f5, f6 y f9.
+-   Variables que no muestran evidencia significativa de la presencia de sesgo: f0, f1, f2, f3, f4, f7 y f8
+
+**Kurtosis**:
+
+Para analizar la kurtosis vamos a usar el test de Anscombe.
+
+```{r}
+anscombe.test(vowel$f0)
+anscombe.test(vowel$f1)
+anscombe.test(vowel$f2)
+anscombe.test(vowel$f3)
+anscombe.test(vowel$f4)
+anscombe.test(vowel$f5)
+anscombe.test(vowel$f6)
+anscombe.test(vowel$f7)
+anscombe.test(vowel$f8)
+anscombe.test(vowel$f9)
+```
+
+Observaciones:
+
+-   Variables que muestran evidencia significativa de tener kurtosis diferente de 3: f0, f1, f3, f4, f5, f7, f8 y f9.
+-   Variables que no muestran evidencia significativa de tener kurtosis diferente de 3: f2 y f6
+
+### Normalidad de los datos
+
+Si bien con el test D'Agostino y el test de Anscombe-Glynn podemos hacernos una idea de qué variables siguen aproximadamente una distribución normal (distribución simétrica y kurtosis de 3 son características de distribuciones normales), vamos a utilizar otros mecanismos para cerciorarnos de estos, en concreto realizaremos el test de Shapiro-Wilk's y un gráfico QQ-plot.
+
+**Test de Shapiro-Wilk's**
+
+```{r}
+shapiro.test(vowel$f0)
+shapiro.test(vowel$f1)
+shapiro.test(vowel$f2)
+shapiro.test(vowel$f3)
+shapiro.test(vowel$f4)
+shapiro.test(vowel$f5)
+shapiro.test(vowel$f6)
+shapiro.test(vowel$f7)
+shapiro.test(vowel$f8)
+shapiro.test(vowel$f9)
+```
+
+Salvo f4, para las demás variables el p-valor es extremadamente pequeño, lo que sugiere que hay evidencia significativa para rechazar la hipótesis nula de que los datos provienen de una distribución normal.
+
+**QQ-plot**
+
+```{r}
+library(DataExplorer)
+```
+
+```{r}
+plot_qq(vowel)
+```
+
+A partir del gráfico QQ-plot podemos ver como todas las variables siguen casi completamente la línea que marca la distribución normal, por lo que a diferencia de lo que nos decía el test de Shapiro-Wilk si que parece que las distribuciones de dichas variables se asemejan en gran manera a una distribución normal, esto lo verificaremos con los histogramas.
+
+### Tablas de contingencia (variables categóricas)
+
+Vamos a mostrar las tablas de contingencia para las variables categóricas, con esto podemos ver si existe desequilibrio entre las clases:
+
+```{r}
+apply(vowel[,-(2:11)], 2, table)
+```
+
+Observaciones:
+
+- variable sex: existen mas instancias de la clase male que female, pero ese desequilibrio no es muy grave de cara a la aplicación de los modelos de clasificación.
+- variable objetivo: tenemos igual número de instancias para cada clase, lo cual es lo ideal para aplicar modelos de clasificación ya que no tenemos problemas de desequilibrio de clases.
+
+## Visualización de datos
+
+Además de usar estadística descriptiva para mostrar los rasgos que presentan las variables del conjunto de datos, realizar distintos tipos de visualizaciones es interesante para no solo obtener información nueva, sino también contrastar la información que hemos obtenido mediante la estadística descriptiva.
+
+**Histogramas (variables numéricas)**
+
+En primer lugar vamos a pintar un histograma para cada variable numérica para hacernos una idea de la distribución que siguen las variables. Además, también pintaremos la media y la mediana para comprobar que ambas no estan muy alejadas entre sí.
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+plot_hist <- function(data) {
+  sapply(names(data), function(col_name) {
+    
+    p <- data %>% ggplot(aes_string(x = col_name)) +
+      geom_histogram(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - ", col_name)) +
+      geom_vline(xintercept = median(data[[col_name]]), color = "red", 
+                 linetype = "dashed", size = 1.5) +
+      geom_vline(xintercept = mean(data[[col_name]]), color = "blue", 
+                 linetype = "dotted", size = 1.5)
+    print(p)
+  })
+}
+
+plot_hist(vowel[,2:11])
+```
+
+A partir de los histogramas podemos sacar las siguientes conclusiones:
+
+-   Tal y como nos indicaban las medidas de tendencia central y dispersión, la media y la mediana son bastante similares y además son representativas para cada una de las variables del dataset.
+
+-   Como veíamos a través del gráfico QQ-plot, todas las variables numéricas presentan una distribución parecida a la que tendría una distribución normal. Lo cual es muy importante pues gran parte de las asumpciones estadísticas que siguen modelos de clasificación necesitan que la distribución de las variables sea normal.
+
+**Gráfico de cajas**
+
+A continuación vamos a mostrar diagramas de caja para cada variable, principalmente con el objeto de detectar outliers en las variables
+
+```{r}
+plot_boxplots <- function(data) {
+  sapply(names(data), function(col_name) {
+    p <- data %>% ggplot(aes_string(x = col_name)) +
+      geom_boxplot(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - ", col_name))
+    print(p)
+  })
+}
+
+plot_boxplots(vowel[,2:11])
+```
+
+Podemos ver como solo unas pocas variables presentar outliers, además en poca cantidad. Esto se corresponde cuando decíamos que la media y la mediana eran muy similares debido la simetría de las ditribuciones (que también se aprecia en estos gráficos) y la ausencia de valores atípicos.
+
+**Gráfico de barras (variables categóricas)**
+
+Para visualizar mejor las variables categóricas vamos a realizar un gráfico de barras
+
+```{r}
+plot_bar <- function(data) {
+  sapply(names(data), function(col_name) {
+    
+    p <- data %>% ggplot(aes_string(x = col_name)) +
+      geom_bar(color = "darkblue", fill = "lightblue") +
+      labs(title = paste("Curva de densidad - ", col_name))
+    print(p)
+  })
+}
+
+plot_bar(vowel[,-(2:11)])
+```
+
+Con esto podemos ver de manera más visual lo que ya nos decía las tablas de contigencia.
+
+### Exploración de relaciones entre variables
+
+#### Separabilidad de las variables por clases
+
+Lo primero que vamos a comprobar es si existe cierta separabilidad en las clases de las instancias, esto es útil pues dependiendo de la separabilidad utilizaremos un determinado modelo para nuestro conjunto de datos
+
+**Nota**: en el gráfico solo hemos mostrado las variables de f0 a f3 pues si ponemos todas no se puede apreciar, pero se ha mirado con todas.
+
+```{r}
+library(GGally)
+p <- ggpairs(vowel, columns = 2:5, aes(color = class, alpha = 0.5))
+print(p)
+```
+
+Como podemos observar, no existe una clara separabilidad entre las clases para las distintas variables, esto se tendrá en cuenta a la hora de elegir el modelo de clasificación.
+
+#### Gráfico de puntos variable independiente vs independiente
+
+En este caso vamos a graficar cada variable numérica independiente frente a las demás independiente, todo esto con el objeto de detectar correlaciones entre variables y así saber qué variables se podrian no usar en un modelo de clasificación ya que otra contiene la misma información. Mostraremos tanto una nube de puntos como un gráfico de correlaciones, pues este último es muy útil para ver la correlación entre dos variables.
+
+```{r}
+library(Sleuth2)
+```
+
+```{r}
+pairs(vowel[,2:11], upper.panel = NULL)
+```
+
+```{r}
+library(corrplot)
+```
+
+```{r}
+corrplot(cor(vowel[,2:11]), method = "ellipse", type = "lower")
+```
+
+Podemos observar que existe correlación entre varias variables, lo cual es un indicio que varias de las variables comparten información.
+
+#### PCA.
+
+Dado que existe una correlación generalizada en el conjunto de datos, y además con el objeto de saber cuáles son las características más importantes de f0 a f9, vamos a realizar PCA.
+
+```{r}
+library("FactoMineR")
+library("factoextra")
+```
+
+```{r}
+vowel_pca = PCA(vowel[,2:11], scale.unit = TRUE, ncp = 10, graph = FALSE)
+```
+
+```{r}
+get_eigenvalue(vowel_pca)
+```
+
+```{r}
+fviz_eig(vowel_pca, addlabels = TRUE, ylim = c(0, 40))
+```
+
+Observando el porcentaje de la varianza explicada, no parece un PCA muy bueno pues las 2 primeras dimensiones solo explican un 46.2% de la varianza, cuando un buen PCA debería explicar sobre un 70% de la varianza con las 2 primeras componentes. Sin embargo, si que podemos obtener información de las variables más importantes para cada componente y en sí para el propio conjunto de datos. Vamos a revisar las 2 primeras componentes. 
+
+**Primera componente**:
+
+```{r}
+fviz_contrib(vowel_pca,
+             choice = "var",
+             axes = 1,
+             xtickslab.rt = 90,
+             top=10)
+```
+
+Podemos observar como las variables f6, f9, f3, f2, y f7 son las relevantes para dicha dimensión.
+
+**Segunda componente**:
+
+```{r}
+fviz_contrib(vowel_pca,
+             choice = "var",
+             axes = 2,
+             xtickslab.rt = 90,
+             top=10)
+```
+
+Podemos observar como las variables f1, f4, f5, f8, y f2 son las relevantes para dicha dimensión.
+
+### Transformación de variables
+
+En el caso de este problema no vamos probar ninguna transformación sobre las variables ya que mirando los histogramas de estas, tal y como están ya tienen distribuciones bastante similares a una distribución normal.
+
+## Conclusiones finales
+
+### Comprobación de las hipótesis
+
+- ¿El sexo influyen en las distribuciones de las variables numéricas?
+
+```{r}
+hist_by_sex <- function(variable) {
+  ggplot(vowel, aes(x = .data[[variable]])) +
+    geom_histogram(binwidth = 0.5, position = "identity", alpha = 0.7) +
+    labs(title = paste("Histograma de", variable, "por Sexo"),
+         x = variable, y = "Frecuencia") +
+    scale_fill_manual(values = c("blue", "pink")) +
+    facet_wrap(~ sex, scales = "free") +
+    theme_minimal()
+}
+
+variables_to_plot <- c("f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9")
+
+lapply(variables_to_plot, hist_by_sex)
+```
+
+Como podemos ver, dependiendo del sexo la distribución de cada variable sufre una cierta modificación, mayor o menor dependiendo de la variable. Este es un indicio de que el sexo es información útil a la hora de la clasificación.
+
+- ¿La clase objetivo influye en las distribuciones de las variables numéricas?
+
+```{r}
+hist_by_class <- function(variable) {
+  ggplot(vowel, aes(x = .data[[variable]])) +
+    geom_histogram(binwidth = 0.5, position = "identity", alpha = 0.7) +
+    labs(title = paste("Histograma de", variable, "por class"),
+         x = variable, y = "Frecuencia") +
+    scale_fill_manual(values = c("blue", "pink")) +
+    facet_wrap(~ class, scales = "free") +
+    theme_minimal()
+}
+
+variables_to_plot <- c("f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9")
+
+lapply(variables_to_plot, hist_by_class)
+```
+
+Como podemos observar, dependiendo del la clase a la que pertenece cada instancia, la distribución de cada variable numérica difiere bastante.
+
+- ¿Y la clase y el sexo juntos?
+
+```{r}
+hist_by_class_and_sex <- function(variable) {
+  ggplot(vowel, aes(x = .data[[variable]], fill = sex)) +
+    geom_histogram(binwidth = 0.5, position = "identity", alpha = 0.7) +
+    labs(title = paste("Histograma de", variable, "por class"),
+         x = variable, y = "Frecuencia") +
+    scale_fill_manual(values = c("blue", "pink")) +
+    facet_wrap(~ class, scales = "free") +
+    theme_minimal()
+}
+
+variables_to_plot <- c("f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9")
+
+lapply(variables_to_plot, hist_by_class_and_sex)
+```
+
+De nuevo observamos que dependiendo del sexo, la distribuciones de las variables numéricas dependiendo de la variable objetivo difieren bastante.
+
+### Resumen del conjunto de datos
+
+Tenemos un conjunto de datos en el que las variables siguen una distribución parecida a una normal, algo muy bueno de cara a la asumpciones estadísticas que suponen distribuciones normales en las variables. En base al PCA, las características de las vocales más interesantes son f6, f9, f3, f2, y f7 pues son las que más explican la primera componente, y por parte de la segunda componente f1, f4, f5, f8, y f2 son las que más explican esta componente. También tenemos correlación entre las variables, algo que podrá influir negativamente en los modelos de clasificación.
+
+# Clasificación
+
+Lo primero que vamos a hacer es leer las distintas particiones de entrenamiento y test que tenemos para nuestro conjunto de datos
+
+```{r}
+library(MASS)
+library(kknn)
+```
+
+```{r}
+read_vowel_data <- function(index, data_type = "train") {
+  file <- sprintf("vowel/vowel-10-%d%s.dat", index, 
+                  ifelse(data_type == "test", "tst", "tra"))
+  data <- read.csv(file, comment.char="@", header=FALSE)
+  
+  data
+}
+
+train_list <- lapply(1:10, read_vowel_data, data_type = "train")
+test_list <- lapply(1:10, read_vowel_data, data_type = "test")
+```
+
+A continuación vamos a aplicar el proceso de preparado de datos que hemos hecho durante el EDA:
+
+```{r}
+apply_eda <- function(df) {
+  colnames(df) <- c("tt", "speaker_number", "sex",
+                    "f0", "f1", "f2", "f3",
+                    "f4", "f5", "f6", "f7", "f8", "f9", "class")
+  df$tt <- factor(df$tt, c(0,1), c("train", "test"))
+  df$speaker_number <- factor(df$speaker_number, 0:14, as.character(0:14))
+  df$sex <- factor(df$sex, c(0,1), c("male", "female"))
+  df$class <- factor(df$class, 0:10, as.character(0:10))
+  df <- df[,-(1:2)]
+  
+  df
+}
+```
+
+```{r}
+train_list <- lapply(train_list, apply_eda)
+test_list <- lapply(test_list, apply_eda)
+```
+
+También vamos a crear una lista con los datos normalizados para KNN:
+
+```{r}
+apply_normalize <- function(df) {
+  num_cols <- sapply(df, is.numeric)
+  df[, num_cols] <- scale(df[, num_cols])
+  
+  df
+}
+```
+
+```{r}
+train_list_normalized <- lapply(train_list, apply_normalize)
+test_list_normalized <- lapply(test_list, apply_normalize)
+```
+
+
+Ahora vamos a crear una función que aplique knn usando a las distintas particiones de entrenamiento y test y nos calcule la precisión que obtenemos
+
+```{r}
+cv_knn_accuracy <- function(formula, k, train_list, test_list, ...) {
+  sapply(1:length(train_list), function(i) {
+    fit <- kknn(formula,train_list[[i]], test_list[[i]], k=k, ...)
+    preds <- fit$fitted.values
+    
+    sum(preds==test_list[[i]]$class)/length(preds)
+  })
+}
+```
+
+
+Vamos a probar con los siguientes valores de k: 1, 5, 10, 50 y 100
+
+```{r}
+cv_knn_1_train <- cv_knn_accuracy(class~., 1, 
+                                  train_list_normalized, 
+                                  train_list_normalized)
+cv_knn_1_test <- cv_knn_accuracy(class~., 1, 
+                                 train_list_normalized, 
+                                 test_list_normalized)
+cv_knn_5_train <- cv_knn_accuracy(class~., 5, 
+                                  train_list_normalized, 
+                                  train_list_normalized)
+cv_knn_5_test <- cv_knn_accuracy(class~., 5, 
+                                 train_list_normalized, 
+                                 test_list_normalized)
+cv_knn_10_train <- cv_knn_accuracy(class~., 10, 
+                                   train_list_normalized, 
+                                   train_list_normalized)
+cv_knn_10_test <- cv_knn_accuracy(class~., 10, 
+                                  train_list_normalized, 
+                                  test_list_normalized)
+cv_knn_50_train <- cv_knn_accuracy(class~., 50, 
+                                   train_list_normalized, 
+                                   train_list_normalized)
+cv_knn_50_test <- cv_knn_accuracy(class~., 50, 
+                                  train_list_normalized, 
+                                  test_list_normalized)
+cv_knn_100_train <- cv_knn_accuracy(class~., 100, 
+                                    train_list_normalized, 
+                                    train_list_normalized)
+cv_knn_100_test <- cv_knn_accuracy(class~., 100, 
+                                   train_list_normalized, 
+                                   test_list_normalized)
+```
+
+```{r}
+l_train <- rbind(cv_knn_1_train,cv_knn_5_train, cv_knn_10_train, 
+                 cv_knn_50_train, cv_knn_100_train)
+l_test <- rbind(cv_knn_1_test, cv_knn_5_test, cv_knn_10_test, 
+                cv_knn_50_test, cv_knn_100_test)
+
+apply(l_train, 1, mean)
+apply(l_test, 1, mean)
+```
+
+Podemos observar que hasta $k=5$ no observamos un empeoramiento muy significativo en la precisión obtenida. A partir de ahí empieza a empeorar gradualmente.
+
+Comparando el resultado obtenido en test frente a entrenamiento para cada k, vemos que siempre la precisión obtenida en train es superior a la obtenida en test, algo lógico.
+
+En vista de los resultados el mejor valor de k es 1, pues es con el que obtenemos mejores resultados, y a la vez es el que consume menos computacionalmente ya que tenemos que buscar sólo el vecino más cercano.
+
+## LDA
+
+El primer paso con LDA es comprobar las hipótesis de partida:
+
+- Que las observaciones siguen una distribución normal para cada predictor.
+
+```{r lda_hipotesis_normal}
+my_shapiro <- function(a) {
+  shapiro.test(a)$statistic
+}
+
+vowel[,-1] %>%
+  group_by(class) %>%
+  summarise(across(f0:f9, my_shapiro))
+```
+
+Como podemos observar, las mayoría de los resultados son bastante cercanos a 1, lo cual significa que los datos parace que se ajustan bien a una distribución normal.
+
+- Que las matrices de varianza-covarianza son homogéneas.
+
+Para ello vamos a aplicar el test de Bartlett.
+
+```{r}
+bartlett.test(f0 ~ class, vowel)
+bartlett.test(f1 ~ class, vowel)
+bartlett.test(f2 ~ class, vowel)
+bartlett.test(f3 ~ class, vowel)
+bartlett.test(f4 ~ class, vowel)
+bartlett.test(f5 ~ class, vowel)
+bartlett.test(f6 ~ class, vowel)
+bartlett.test(f7 ~ class, vowel)
+bartlett.test(f8 ~ class, vowel)
+bartlett.test(f9 ~ class, vowel)
+```
+
+Las pruebas de Bartlett sugieren que, en general, las varianzas no son homogéneas entre los grupos para la mayoría de las variables, excepto posiblemente para 
+f9, donde la evidencia es más débil para rechazar la igualdad de varianzas.
+
+No se da esta última condición pero igualmente vamos a aplicar LDA para ver qué resultado obtenemos:
+
+```{r}
+cv_method_accuracy <- function(method, formula, train_list, test_list) {
+  sapply(1:length(train_list), function(i) {
+    fit <- method(formula,data=train_list[[i]])
+    preds <- predict(fit, test_list[[i]])
+    
+    sum(preds$class == test_list[[i]]$class) / length(preds$class)
+  })
+}
+
+lda_cv_test <- cv_method_accuracy(lda, class ~ ., train_list, test_list)
+lda_cv_train <- cv_method_accuracy(lda, class ~ ., train_list, train_list)
+```
+
+```{r}
+mean(lda_cv_train)
+mean(lda_cv_test)
+```
+
+Como podemos ver, obtenemos un bastante peor resultado que el obtenido en KNN.
+
+## QDA
+
+Como hemos visto antes, las varianzas no son homogéneas entre los grupos para la mayoría de las variables. Esto significa que probablemente obtengamos un mejor resultado en QDA en en LDA.
+
+Antes de ejecutar QDA debemos comprobar las siguientes asumpciones:
+
+- El número de predictores (variables independientes) debe ser menor que el número de casos dentro de cada clase: tenemos 11 predictores (lo hemos revisado en el EDA en el apartado de estructura del conjunto de datos) y por cada case de la variable objetivo tenemos 90 instancias (lo hemos revisado en el EDA en el apartado de tablas de contingencia), por tanto esta asumpción se cumple.
+
+- Los predictores dentro de cada clase no tengan niveles patológicos de colinealidad: en este caso, a partir del EDA sabemos que entre las variables independientes existen una correlación a tener en cuenta (lo hemos revisado en el apartado grafico de gráfico de puntos variable independiente vs independiente), por lo que puede que esta asumpción no se cumple en su totalidad.
+
+Una vez revisadas las asumpciones y viendo que una se cumple completamente y la otra no del todo, ejecutamos QDA para ver qué resultado obtenemos:
+
+**NOTA**: se ha tenido que eliminar la variable sex del modelo pues debido al desequilibrio que presenta entre las clases de dicha variable no permite ejecutar QDA.
+
+```{r}
+qda_cv_test <- cv_method_accuracy(qda, class ~ . - sex, train_list, test_list)
+qda_cv_train <- cv_method_accuracy(qda, class ~ . - sex, train_list, train_list)
+```
+
+```{r}
+mean(qda_cv_train)
+mean(qda_cv_test)
+```
+
+Tal y como pensabamos hemos obtenido unos mucho mejores resultados en QDA que en LDA, esto es debido a que QDA funcionará mejor cuando las varianzas sean muy diferentes entre
+clases.
+
+## Comparación de resultados:
+
+Como hemos visto los modelos que han tenido un mejor desempeño son KNN, QDA y LDA, en ese orden. Las razones de que esto sea así son:
+
+- Que KNN nos dé los mejores resultados es debido a que los límites de decisión son claramente no lineales en este dataset, tal y como vimos en el apartado de separabilidad de las variables por clases en el EDA. Cuanto más complejos sean los límites de decisión, mejor se comportará KNN frente a LDA.
+- Que QDA nos dé unos resultados intermedios entre LDA Y KNN es debido a que este es un compromiso entre el método no paramétrico k-NN y el método lineal LDA.
+
+
+
+
+
+
+
+
+
